@@ -47,7 +47,12 @@ def fetch_news(days_back=7):
         },
         timeout=15,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        # NewsAPI free tier blocks server-side requests (401) — skip silently
+        print(f"  NewsAPI unavailable: {e}")
+        return []
 
     events = []
     for a in resp.json().get("articles", []):
