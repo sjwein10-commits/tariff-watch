@@ -1,0 +1,4 @@
+supabase
+anthropic
+python-dotenv
+requests
