@@ -57,6 +57,20 @@ ANALYSIS_TOOL = {
                 "type": "string",
                 "description": "1-2 sentences placing this in the context of US trade history — compare to prior tariff actions, trade wars, or relevant precedents. E.g. 'The last time the US imposed steel tariffs of this scale was under Bush in 2002, which the WTO ruled illegal 18 months later.'",
             },
+            "story_tags": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "us-china-trade-war",
+                        "canada-mexico-tensions",
+                        "steel-aluminum",
+                        "liberation-day",
+                        "phase-one-deal",
+                    ],
+                },
+                "description": "Story thread slugs this event belongs to. Can be empty array if none apply.",
+            },
         },
         "required": [
             "products",
@@ -69,6 +83,7 @@ ANALYSIS_TOOL = {
             "consumer_impact",
             "retaliation_risk",
             "historical_context",
+            "story_tags",
         ],
     },
 }
