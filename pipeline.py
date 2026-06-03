@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from db import supabase
-from fetch import fetch_federal_register, fetch_news
+from fetch import fetch_federal_register, fetch_news, fetch_google_news
 from analyze import analyze_event
 
 
@@ -15,7 +15,7 @@ def run():
     print("Fetching tariff events...")
     existing_urls = get_existing_urls()
 
-    candidates = fetch_federal_register(days_back=7) + fetch_news(days_back=7)
+    candidates = fetch_federal_register(days_back=7) + fetch_google_news(days_back=7) + fetch_news(days_back=7)
     new_events = [e for e in candidates if e["source_url"] not in existing_urls]
 
     print(f"Found {len(new_events)} new events (skipped {len(candidates) - len(new_events)} already in DB)")
