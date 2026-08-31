@@ -2,7 +2,7 @@ import anthropic
 
 client = anthropic.Anthropic()
 
-SYSTEM_PROMPT = "You are an international trade economist who specializes in US tariff policy and its effects on prices, supply chains, and global trade relationships."
+SYSTEM_PROMPT = "You are an international trade economist and investment analyst who specializes in US tariff policy and its effects on prices, supply chains, equities, and global trade relationships. When analyzing events, be specific — name real companies, tickers, ETFs, and commodities. Quantify where possible."
 
 ANALYSIS_TOOL = {
     "name": "store_tariff_analysis",
@@ -47,15 +47,15 @@ ANALYSIS_TOOL = {
             },
             "consumer_impact": {
                 "type": "string",
-                "description": "1-2 sentences explaining the real-world effect on everyday consumers — mention specific products and estimated price changes where possible. E.g. 'Expect washing machine prices to rise ~$100. Cars could cost $800-1,500 more within a year.'",
+                "description": "1-2 sentences explaining the real-world effect on everyday consumers — mention specific products and estimated price changes where possible.",
             },
             "retaliation_risk": {
                 "type": "string",
-                "description": "1-2 sentences on whether affected countries are likely to retaliate, what form it might take, and what US exports are most at risk. E.g. 'China is likely to target US agricultural exports, particularly soybeans and pork, which would hurt Midwestern farmers.'",
+                "description": "1-2 sentences on whether affected countries are likely to retaliate, what form it might take, and what US exports are most at risk.",
             },
             "historical_context": {
                 "type": "string",
-                "description": "1-2 sentences placing this in the context of US trade history — compare to prior tariff actions, trade wars, or relevant precedents. E.g. 'The last time the US imposed steel tariffs of this scale was under Bush in 2002, which the WTO ruled illegal 18 months later.'",
+                "description": "1-2 sentences placing this in the context of US trade history — compare to prior tariff actions, trade wars, or relevant precedents.",
             },
             "story_tags": {
                 "type": "array",
@@ -71,6 +71,93 @@ ANALYSIS_TOOL = {
                 },
                 "description": "Story thread slugs this event belongs to. Can be empty array if none apply.",
             },
+            "winners": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "category": {"type": "string"},
+                        "description": {"type": "string"},
+                    },
+                    "required": ["category", "description"],
+                },
+                "description": "Industries, sectors, or company types that benefit from this tariff action. Name specific domestic producers, substitutes, or geographies that gain competitive advantage. Include 2-4 winners.",
+            },
+            "losers": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "category": {"type": "string"},
+                        "description": {"type": "string"},
+                    },
+                    "required": ["category", "description"],
+                },
+                "description": "Industries, sectors, or company types hurt by this tariff action. Include importers, manufacturers with foreign inputs, and affected end consumers. Include 2-4 losers.",
+            },
+            "affected_companies": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "ticker": {"type": "string"},
+                        "impact": {"type": "string", "enum": ["positive", "negative", "mixed"]},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["name", "ticker", "impact", "reason"],
+                },
+                "description": "Specific publicly traded companies most affected. Include 4-8 companies with real ticker symbols. Only include companies with material impact.",
+            },
+            "inflation_implications": {
+                "type": "string",
+                "description": "2-3 sentences on the inflationary effect. Mention specific price categories, CPI components, and estimated magnitude (e.g. 'could add 0.2-0.4% to core CPI').",
+            },
+            "supply_chain_implications": {
+                "type": "string",
+                "description": "2-3 sentences on supply chain disruption. Which supply chains are at risk? What sourcing shifts might occur? Which regions absorb the shock?",
+            },
+            "stocks_to_watch": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "ticker": {"type": "string"},
+                        "name": {"type": "string"},
+                        "direction": {"type": "string", "enum": ["up", "down"]},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["ticker", "name", "direction", "reason"],
+                },
+                "description": "4-6 individual stocks most directly impacted. Mix of winners and losers. Use real ticker symbols.",
+            },
+            "etfs_affected": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "ticker": {"type": "string"},
+                        "name": {"type": "string"},
+                        "direction": {"type": "string", "enum": ["up", "down"]},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["ticker", "name", "direction", "reason"],
+                },
+                "description": "2-4 sector or thematic ETFs affected. E.g. XME (metals), KWEB (Chinese internet), XBI (biotech), SOXX (semiconductors).",
+            },
+            "commodities_affected": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "direction": {"type": "string", "enum": ["up", "down"]},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["name", "direction", "reason"],
+                },
+                "description": "Commodities impacted — steel, soybeans, oil, lithium, copper, etc. Include 1-4 relevant commodities.",
+            },
         },
         "required": [
             "products",
@@ -84,6 +171,14 @@ ANALYSIS_TOOL = {
             "retaliation_risk",
             "historical_context",
             "story_tags",
+            "winners",
+            "losers",
+            "affected_companies",
+            "inflation_implications",
+            "supply_chain_implications",
+            "stocks_to_watch",
+            "etfs_affected",
+            "commodities_affected",
         ],
     },
 }
@@ -92,14 +187,14 @@ ANALYSIS_TOOL = {
 def analyze_event(title, raw_content):
     response = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1500,
+        max_tokens=2500,
         system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
         tools=[ANALYSIS_TOOL],
         tool_choice={"type": "tool", "name": "store_tariff_analysis"},
         messages=[
             {
                 "role": "user",
-                "content": f"Analyze this US tariff event and fill out the analysis tool.\n\nTitle: {title}\n\nContent: {raw_content[:2000]}",
+                "content": f"Analyze this US tariff event and fill out the full analysis tool.\n\nTitle: {title}\n\nContent: {raw_content[:2000]}",
             }
         ],
     )
