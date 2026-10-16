@@ -1,5 +1,6 @@
 import requests
 import os
+import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
@@ -11,12 +12,16 @@ def fetch_federal_register(days_back=7):
         params={
             "conditions[term]": "tariff",
             "conditions[publication_date][gte]": since,
-            "per_page": 20,
+            "per_page": 50,
             "order": "newest",
         },
         timeout=15,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        print(f"  Federal Register unavailable: {e}")
+        return []
 
     events = []
     for r in resp.json().get("results", []):
@@ -34,8 +39,11 @@ def fetch_google_news(days_back=7):
     queries = [
         "Trump tariff",
         "US tariff impact consumers",
-        "US trade war 2025",
+        "US trade war",
         "import tariff prices",
+        "Section 232 tariff",
+        "retaliatory tariffs United States",
+        "trade deal tariffs",
     ]
 
     seen_urls = set()
@@ -75,7 +83,7 @@ def fetch_google_news(days_back=7):
 
                 seen_urls.add(url)
                 events.append({
-                    "title": title,
+                    "title": re.sub(r"\s+-\s+[^-]+$", "", title),
                     "event_date": pub_dt.strftime("%Y-%m-%d"),
                     "source_url": url,
                     "source_type": "news",

@@ -1,3 +1,5 @@
+import json
+
 import anthropic
 
 client = anthropic.Anthropic()
@@ -184,23 +186,37 @@ ANALYSIS_TOOL = {
 }
 
 
+def _strict(schema):
+    # Structured outputs require additionalProperties: false on every object
+    if isinstance(schema, dict):
+        schema = {k: _strict(v) for k, v in schema.items()}
+        if schema.get("type") == "object":
+            schema["additionalProperties"] = False
+    elif isinstance(schema, list):
+        schema = [_strict(v) for v in schema]
+    return schema
+
+
+ANALYSIS_SCHEMA = _strict(ANALYSIS_TOOL["input_schema"])
+
+
 def analyze_event(title, raw_content):
     response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2500,
+        model="claude-sonnet-5-5",
+        max_tokens=8000,
         system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
-        tools=[ANALYSIS_TOOL],
-        tool_choice={"type": "tool", "name": "store_tariff_analysis"},
+        output_config={"effort": "low", "format": {"type": "json_schema", "schema": ANALYSIS_SCHEMA}},
         messages=[
             {
                 "role": "user",
-                "content": f"Analyze this US tariff event and fill out the full analysis tool.\n\nTitle: {title}\n\nContent: {raw_content[:2000]}",
+                "content": f"Analyze this US tariff event and return the full structured analysis.\n\nTitle: {title}\n\nContent: {raw_content[:2000]}",
             }
         ],
     )
 
-    for block in response.content:
-        if block.type == "tool_use" and block.name == "store_tariff_analysis":
-            return block.input
+    if response.stop_reason != "end_turn":
+        print(f"    Analysis stopped early ({response.stop_reason})")
+        return None
 
-    return None
+    text = next((b.text for b in response.content if b.type == "text"), None)
+    return json.loads(text) if text else None
