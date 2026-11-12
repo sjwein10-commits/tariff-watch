@@ -220,3 +220,37 @@ def analyze_event(title, raw_content):
 
     text = next((b.text for b in response.content if b.type == "text"), None)
     return json.loads(text) if text else None
+
+
+DEDUPE_SCHEMA = {
+    "type": "object",
+    "properties": {"duplicates": {"type": "array", "items": {"type": "integer"}}},
+    "required": ["duplicates"],
+    "additionalProperties": False,
+}
+
+
+def find_duplicates(candidates, recent):
+    # One call per run: which new headlines report a story we already have
+    # (or that an earlier new headline already covers)?
+    numbered = "\n".join(f"{i}. {t}" for i, t in enumerate(candidates))
+    known = "\n".join(f"- {t}" for t in recent) or "(none)"
+    response = client.messages.create(
+        model="claude-sonnet-5-5",
+        max_tokens=4000,
+        output_config={"effort": "low", "format": {"type": "json_schema", "schema": DEDUPE_SCHEMA}},
+        messages=[{
+            "role": "user",
+            "content": (
+                "These are news headlines about US tariffs. Return the numbers of NEW headlines that report the same "
+                "news event as an ALREADY SAVED headline, or as a lower-numbered NEW headline. Same event means the same "
+                "specific development (e.g. two outlets covering China extending its tariff truce), not just the same topic. "
+                "Opinion pieces and analysis with a distinct angle are not duplicates.\n\n"
+                f"ALREADY SAVED:\n{known}\n\nNEW:\n{numbered}"
+            ),
+        }],
+    )
+    if response.stop_reason != "end_turn":
+        return set()
+    text = next((b.text for b in response.content if b.type == "text"), None)
+    return {i for i in json.loads(text)["duplicates"] if 0 <= i < len(candidates)} if text else set()

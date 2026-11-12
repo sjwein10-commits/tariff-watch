@@ -2,15 +2,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import re
+from datetime import date, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from itertools import chain, zip_longest
 
 from db import supabase
 from fetch import fetch_federal_register, fetch_news, fetch_google_news
-from analyze import analyze_event
+from analyze import analyze_event, find_duplicates
 
 MAX_NEW_EVENTS_PER_RUN = 12
 CONCURRENCY = 4
+DEDUPE_DAYS = 5
 TARIFF_KEYWORDS = {"tariff", "tariffs", "duty", "duties", "trade war", "import tax", "customs", "section 301", "section 232", "trade deal", "trade agreement"}
 STORY_SLUGS = ["us-china-trade-war", "canada-mexico-tensions", "steel-aluminum", "liberation-day", "phase-one-deal"]
 
@@ -48,6 +50,24 @@ def analyze(event):
         return event, None
 
 
+def drop_same_story(events):
+    # Wire stories get rewritten by dozens of outlets; exact-title matching misses those.
+    # Federal Register notices are distinct documents, so only news is checked.
+    news = [e for e in events if e.get("source_type") == "news"]
+    if not news:
+        return events
+    since = (date.today() - timedelta(days=DEDUPE_DAYS)).isoformat()
+    recent = supabase.table("tariff_events").select("title").eq("source_type", "news").gte("event_date", since).execute().data
+    try:
+        dupes = find_duplicates([e["title"] for e in news], [r["title"] for r in recent])
+    except Exception as err:
+        print(f"Duplicate check failed, keeping all: {err}")
+        return events
+    drop = {id(news[i]) for i in dupes}
+    print(f"Dropped {len(drop)} repeats of stories already covered")
+    return [e for e in events if id(e) not in drop]
+
+
 def refresh_story_counts():
     for slug in STORY_SLUGS:
         count = supabase.table("tariff_events").select("id", count="exact").contains("story_tags", [slug]).limit(1).execute().count
@@ -71,6 +91,7 @@ def run():
         new_events.append(e)
 
     print(f"Found {len(new_events)} new events (skipped {len(candidates) - len(new_events)} duplicates or irrelevant)")
+    new_events = drop_same_story(new_events)
     if len(new_events) > MAX_NEW_EVENTS_PER_RUN:
         print(f"Capping at {MAX_NEW_EVENTS_PER_RUN}")
         new_events = new_events[:MAX_NEW_EVENTS_PER_RUN]
